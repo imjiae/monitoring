@@ -1,0 +1,189 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: grafana-dashboard-hybrid-platform
+  namespace: monitoring
+  labels:
+    grafana_dashboard: "1"
+data:
+  hybrid-platform.json: |
+    {
+      "uid": "hybrid-platform",
+      "title": "하이브리드 플랫폼 관측 대시보드 (Baseline)",
+      "timezone": "browser",
+      "schemaVersion": 39,
+      "version": 1,
+      "refresh": "10s",
+      "tags": ["baseline", "gitops", "hybrid", "k3s"],
+      "time": { "from": "now-30m", "to": "now" },
+      "panels": [
+        {
+          "type": "stat",
+          "title": "모니터링 시스템 정상 동작 여부",
+          "datasource": { "uid": "prometheus" },
+          "targets": [
+            { "refId": "A", "expr": "sum(kube_pod_status_phase{namespace=\"monitoring\", phase=\"Running\"})" }
+          ],
+          "gridPos": { "x": 0, "y": 0, "w": 6, "h": 4 }
+        },
+        {
+          "type": "stat",
+          "title": "최근 5분간 재시작 발생 여부",
+          "datasource": { "uid": "prometheus" },
+          "targets": [
+            { "refId": "A", "expr": "sum(rate(kube_pod_container_status_restarts_total[5m]))" }
+          ],
+          "gridPos": { "x": 6, "y": 0, "w": 6, "h": 4 }
+        },
+        {
+          "type": "stat",
+          "title": "온프레미스 서버 CPU 사용률",
+          "datasource": { "uid": "prometheus" },
+          "targets": [
+            { "refId": "A", "expr": "100 - avg by (instance)(rate(node_cpu_seconds_total{mode=\"idle\"}[5m])) * 100" }
+          ],
+          "gridPos": { "x": 12, "y": 0, "w": 6, "h": 4 }
+        },
+        {
+          "type": "stat",
+          "title": "온프레미스 서버 메모리 사용률",
+          "datasource": { "uid": "prometheus" },
+          "targets": [
+            { "refId": "A", "expr": "(node_memory_MemTotal_bytes - node_memory_MemAvailable_bytes) / node_memory_MemTotal_bytes * 100" }
+          ],
+          "gridPos": { "x": 18, "y": 0, "w": 6, "h": 4 }
+        },
+
+        {
+          "type": "table",
+          "title": "네임스페이스별 Pod 상태 요약",
+          "datasource": { "uid": "prometheus" },
+          "targets": [
+            { "refId": "A", "expr": "count by (namespace, phase) (kube_pod_status_phase{namespace=~\"monitoring|argocd|application|cd\"} == 1)" }
+          ],
+          "gridPos": { "x": 0, "y": 4, "w": 12, "h": 7 }
+        },
+        {
+          "type": "timeseries",
+          "title": "재시작이 가장 많은 Pod (Top N)",
+          "datasource": { "uid": "prometheus" },
+          "targets": [
+            { "refId": "A", "expr": "topk(10, sum by (pod, namespace) (rate(kube_pod_container_status_restarts_total[5m])))" }
+          ],
+          "gridPos": { "x": 12, "y": 4, "w": 12, "h": 7 }
+        },
+
+        {
+          "type": "timeseries",
+          "title": "CPU 사용률 추이 (지속 부하 여부)",
+          "datasource": { "uid": "prometheus" },
+          "targets": [
+            { "refId": "A", "expr": "100 - avg by (instance)(rate(node_cpu_seconds_total{mode=\"idle\"}[5m])) * 100" }
+          ],
+          "gridPos": { "x": 0, "y": 11, "w": 12, "h": 7 }
+        },
+        {
+          "type": "timeseries",
+          "title": "메모리 사용률 추이 (OOM 전조 확인)",
+          "datasource": { "uid": "prometheus" },
+          "targets": [
+            { "refId": "A", "expr": "(node_memory_MemTotal_bytes - node_memory_MemAvailable_bytes) / node_memory_MemTotal_bytes * 100" }
+          ],
+          "gridPos": { "x": 12, "y": 11, "w": 12, "h": 7 }
+        },
+
+        {
+          "type": "timeseries",
+          "title": "Prometheus 수집 대상 정상 여부",
+          "datasource": { "uid": "prometheus" },
+          "targets": [
+            { "refId": "A", "expr": "sum(up)" }
+          ],
+          "gridPos": { "x": 0, "y": 18, "w": 8, "h": 6 }
+        },
+        {
+          "type": "timeseries",
+          "title": "Grafana 서비스 안정성 (재시작 여부)",
+          "datasource": { "uid": "prometheus" },
+          "targets": [
+            { "refId": "A", "expr": "sum by (pod)(rate(kube_pod_container_status_restarts_total{namespace=\"monitoring\", pod=~\".*grafana.*\"}[5m]))" }
+          ],
+          "gridPos": { "x": 8, "y": 18, "w": 8, "h": 6 }
+        },
+        {
+          "type": "logs",
+          "title": "로그 수집 시스템 오류 감지",
+          "datasource": { "uid": "loki" },
+          "targets": [
+            { "refId": "A", "expr": "{namespace=\"monitoring\"} |= \"error\"" }
+          ],
+          "gridPos": { "x": 16, "y": 18, "w": 8, "h": 6 }
+        },
+
+        {
+          "type": "timeseries",
+          "title": "배포/스케일 변경 감지 (Deployment)",
+          "datasource": { "uid": "prometheus" },
+          "targets": [
+            { "refId": "A", "expr": "sum by (namespace, deployment) (changes(kube_deployment_status_replicas_updated[15m]))" }
+          ],
+          "gridPos": { "x": 0, "y": 24, "w": 12, "h": 7 }
+        },
+        {
+          "type": "timeseries",
+          "title": "배포 이력 변화 감지 (ReplicaSet)",
+          "datasource": { "uid": "prometheus" },
+          "targets": [
+            { "refId": "A", "expr": "sum by (namespace, replicaset) (changes(kube_replicaset_status_replicas[15m]))" }
+          ],
+          "gridPos": { "x": 12, "y": 24, "w": 12, "h": 7 }
+        },
+
+        {
+          "type": "stat",
+          "title": "VPN(WireGuard) 연결 상태",
+          "datasource": { "uid": "prometheus" },
+          "targets": [
+            { "refId": "A", "expr": "max(node_network_up{device=~\"wg0|wg1\"})" }
+          ],
+          "gridPos": { "x": 0, "y": 31, "w": 6, "h": 5 }
+        },
+        {
+          "type": "timeseries",
+          "title": "VPN 트래픽 흐름 (온프레 ↔ 외부)",
+          "datasource": { "uid": "prometheus" },
+          "targets": [
+            { "refId": "A", "expr": "sum by (device) (rate(node_network_receive_bytes_total{device=~\"wg0|wg1\"}[5m]))" },
+            { "refId": "B", "expr": "sum by (device) (rate(node_network_transmit_bytes_total{device=~\"wg0|wg1\"}[5m]))" }
+          ],
+          "gridPos": { "x": 6, "y": 31, "w": 18, "h": 5 }
+        },
+
+        {
+          "type": "stat",
+          "title": "온프레미스 수집 대상 연결 상태",
+          "datasource": { "uid": "prometheus" },
+          "targets": [
+            { "refId": "A", "expr": "max(up{job=~\"onprem|on-prem|node-exporter-onprem|node-exporter\"})" }
+          ],
+          "gridPos": { "x": 0, "y": 36, "w": 6, "h": 5 }
+        },
+        {
+          "type": "table",
+          "title": "온프레미스 수집 대상 목록",
+          "datasource": { "uid": "prometheus" },
+          "targets": [
+            { "refId": "A", "expr": "up{job=~\"onprem|on-prem|node-exporter-onprem|node-exporter\"}" }
+          ],
+          "gridPos": { "x": 6, "y": 36, "w": 18, "h": 5 }
+        },
+
+        {
+          "type": "row",
+          "title": "애플리케이션 · 보안 지표 (서비스 연동 시 활성화)",
+          "collapsed": true,
+          "gridPos": { "x": 0, "y": 41, "w": 24, "h": 1 },
+          "panels": []
+        }
+      ]
+    }
